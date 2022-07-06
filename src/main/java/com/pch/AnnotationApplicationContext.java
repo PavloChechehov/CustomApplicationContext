@@ -6,6 +6,7 @@ import lombok.SneakyThrows;
 import org.reflections.Reflections;
 import org.reflections.util.ConfigurationBuilder;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -14,9 +15,12 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArraySet;
 
+import static org.reflections.ReflectionUtils.Fields;
+
 public class AnnotationApplicationContext implements ApplicationContext {
 
     private static final Map<String, Object> ANNOTATED_BEAN_CLASSES = new HashMap<>();
+    private static final Map<String, Set<String>> ANNOTATED_INJECT_FIELDS = new HashMap<>();
     private final Reflections reflections;
     private static final Map<Class<?>, Map<String, Object>> BEAN_TYPE_ANNOTATED_BEAN_CLASSES = new HashMap<>();
 
@@ -60,6 +64,30 @@ public class AnnotationApplicationContext implements ApplicationContext {
                 }
             }
 
+        }
+
+        injectInstanceInField();
+    }
+
+    @SneakyThrows
+    private void injectInstanceInField() {
+        for (Object value : ANNOTATED_BEAN_CLASSES.values()) {
+            Class<?> aClass = value.getClass();
+
+            //1. get all fields of this class
+            //2. filter fields that are annotated with @Inject
+            //3. get instance and inject it in this field
+
+            Set<Field> fields = reflections.get(Fields.of(aClass)
+                .filter(field -> field.isAnnotationPresent(Inject.class)));
+
+            for (Field field : fields) {
+                Class<?> type = field.getType();
+                Object currentObjectBean = getBean(aClass);
+                Object fieldObjectBean = getBean(type);
+                field.setAccessible(true);
+                field.set(currentObjectBean, fieldObjectBean);
+            }
         }
     }
 

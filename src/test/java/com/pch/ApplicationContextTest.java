@@ -2,6 +2,7 @@ package com.pch;
 
 import com.pch.bean.AnnotatedBean;
 import com.pch.bean.AnnotatedBeanWithName;
+import com.pch.bean.InjectBean;
 import com.pch.bean.Mentor;
 import com.pch.bean.NoAnnotatedBean;
 import com.pch.bean.StudentOne;
@@ -92,4 +93,12 @@ class ApplicationContextTest {
         assertNull(allBeans);
     }
 
+    @Test
+    void getInstanceOfInjectBean() {
+        AnnotatedBean annotatedBean = applicationContext.getBean(AnnotatedBean.class);
+        InjectBean injectBean = annotatedBean.injectBean;
+        assertNotNull(injectBean);
+
+        assertEquals("It is a inject bean", injectBean.test());
+    }
 }
