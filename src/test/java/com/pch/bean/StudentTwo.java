@@ -6,6 +6,6 @@ import com.pch.Bean;
 public class StudentTwo implements Mentor {
     @Override
     public String work() {
-        return "StudentTwo do homework";
+        return "StudentTwo does homework";
     }
 }

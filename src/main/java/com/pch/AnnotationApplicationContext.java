@@ -7,22 +7,19 @@ import org.reflections.Reflections;
 import org.reflections.util.ConfigurationBuilder;
 
 import java.lang.reflect.Field;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.CopyOnWriteArraySet;
+import java.util.stream.Stream;
 
+import static java.util.stream.Collectors.toMap;
 import static org.reflections.ReflectionUtils.Fields;
 
 public class AnnotationApplicationContext implements ApplicationContext {
 
     private static final Map<String, Object> ANNOTATED_BEAN_CLASSES = new HashMap<>();
-    private static final Map<String, Set<String>> ANNOTATED_INJECT_FIELDS = new HashMap<>();
     private final Reflections reflections;
-    private static final Map<Class<?>, Map<String, Object>> BEAN_TYPE_ANNOTATED_BEAN_CLASSES = new HashMap<>();
 
     @SneakyThrows
     public AnnotationApplicationContext(String packageName) {
@@ -43,27 +40,8 @@ public class AnnotationApplicationContext implements ApplicationContext {
             String value = annotation.value();
             String name = parseName(value, aClass.getSimpleName());
 
-            //Get parent interfaces to create full hierarchy structure
-            Class<?>[] interfaces = aClass.getInterfaces();
             Object instance = aClass.getDeclaredConstructor().newInstance();
-
             ANNOTATED_BEAN_CLASSES.put(name, instance);
-
-            Map<String, Object> beanNameInstance = new HashMap<>();
-            beanNameInstance.put(name, instance);
-
-            BEAN_TYPE_ANNOTATED_BEAN_CLASSES.put(aClass, beanNameInstance);
-            for (Class<?> parent : interfaces) {
-                Map<String, Object> beanNameInstances = BEAN_TYPE_ANNOTATED_BEAN_CLASSES.get(parent);
-                if (beanNameInstances != null) {
-                    beanNameInstances.put(name, instance);
-                } else {
-                    beanNameInstance = new HashMap<>();
-                    beanNameInstance.put(name, instance);
-                    BEAN_TYPE_ANNOTATED_BEAN_CLASSES.put(parent, beanNameInstance);
-                }
-            }
-
         }
 
         injectInstanceInField();
@@ -99,66 +77,52 @@ public class AnnotationApplicationContext implements ApplicationContext {
     @SuppressWarnings("unchecked")
     @Override
     public <T> T getBean(Class<T> beanType) {
-        //1. find all classes that have the same beanType
-        //2. it could be as recursive or while operation
-        //3. filter only classes that annotated with exactly @Bean annotation
-        Set<Class<? extends T>> allBeans = new CopyOnWriteArraySet<>();
-        allBeans.add(beanType);
+        List<?> list = getStream(beanType)
+            .map(Map.Entry::getValue)
+            .toList();
 
-        for (Class<? extends T> bean : allBeans) {
-            //possible hierarchy of classes
-            //GreetingService -> MorningService @Bean
-            //               \-> EveningService
-            //                                 \-> MidnightService @Bean
-            //add all subClasses of this beanType
-            allBeans.addAll(reflections.getSubTypesOf(bean));
+        if (list.size() > 1) {
+            throw new NoUniqueBeanException(String.format("More than 2 beans with annotation @Bean from this %s beanType",
+                beanType.getSimpleName()));
         }
 
-        List<Class<? extends T>> annotatedClasses = new ArrayList<>();
-        for (Class<? extends T> bean : allBeans) {
-            Bean annotation = bean.getAnnotation(Bean.class);
-            if (annotation != null) {
-                annotatedClasses.add(bean);
-            }
-        }
-
-        if (annotatedClasses.size() > 1) {
-            throw new NoUniqueBeanException("More than 2 beans annotated @Bean annotation exist from the same beanType");
-        }
-
-        if (annotatedClasses.isEmpty()) {
-            throw new NoSuchBeanException("Doesn't exist any class with annotation @Bean");
+        if (list.isEmpty()) {
+            throw new NoSuchBeanException(String.format("Doesn't exist bean with annotation @Bean from this %s beanType",
+                beanType.getSimpleName()));
         }
 
         //only one unique class with @Bean
-        Class<? extends T> annotatedClass = annotatedClasses.get(0);
-        Bean annotation = annotatedClass.getAnnotation(Bean.class);
-        String beanName = Optional.ofNullable(annotation)
-            .map(name -> parseName(name.value(), annotatedClass.getSimpleName()))
-            .orElseThrow(() -> new NoSuchBeanException("This beanType is not annotation with @Bean"));
-
-        return (T) ANNOTATED_BEAN_CLASSES.get(beanName);
+        return beanType.cast(list.get(0));
     }
 
 
     @SuppressWarnings("unchecked")
     @Override
     public <T> T getBean(String name, Class<T> beanType) {
-        Bean annotation = beanType.getAnnotation(Bean.class);
-        if (annotation == null) {
-            throw new NoSuchBeanException("This beanType is not annotation with @Bean");
+        Map<String, Object> beanTypes = getStream(beanType)
+            .filter(entry -> entry.getKey().equals(name))
+            .collect(toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        if (beanTypes.isEmpty()) {
+            throw new NoSuchBeanException(
+                String.format("Doesn't exist bean with annotation @Bean from this %s beanType and name %s",
+                    beanType.getSimpleName(), name)
+            );
         }
 
-        if (annotation.value() != null && !annotation.value().equals(name)) {
-            throw new NoSuchBeanException("Bean exists with different value property");
-        }
+        return beanType.cast(beanTypes.get(name));
+    }
 
-        return (T) ANNOTATED_BEAN_CLASSES.get(name);
+    private <T> Stream<Map.Entry<String, Object>> getStream(Class<T> beanType) {
+        return ANNOTATED_BEAN_CLASSES.entrySet()
+            .stream()
+            .filter(entry -> beanType.isAssignableFrom(entry.getValue().getClass()));
     }
 
     @SuppressWarnings("unchecked")
     @Override
     public <T> Map<String, T> getAllBeans(Class<T> beanType) {
-        return (Map<String, T>) BEAN_TYPE_ANNOTATED_BEAN_CLASSES.get(beanType);
+        return getStream(beanType)
+            .collect(toMap(Map.Entry::getKey, entry -> beanType.cast(entry.getValue())));
     }
 }
