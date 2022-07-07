@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ApplicationContextTest {
 
@@ -50,8 +51,8 @@ class ApplicationContextTest {
         assertNotNull(studentOne);
         assertNotNull(studentTwo);
 
-        assertEquals("StudentOne do homework", studentOne.work());
-        assertEquals("StudentTwo do homework", studentTwo.work());
+        assertEquals("StudentOne does homework", studentOne.work());
+        assertEquals("StudentTwo does homework", studentTwo.work());
     }
 
     @Test
@@ -69,13 +70,22 @@ class ApplicationContextTest {
     }
 
     @Test
+    void beanTypeWithSpecificName2() {
+        Mentor studentOne = applicationContext.getBean("studentOne", Mentor.class);
+
+        assertNotNull(studentOne);
+        assertEquals("StudentOne does homework", studentOne.work());
+    }
+
+
+    @Test
     void findAllBeans() {
         Map<String, Mentor> allBeans = applicationContext.getAllBeans(Mentor.class);
         assertEquals(2, allBeans.size());
         Mentor studentOne = allBeans.get("studentOne");
         Mentor studentTwo = allBeans.get("studentTwo");
-        assertEquals("StudentOne do homework", studentOne.work());
-        assertEquals("StudentTwo do homework", studentTwo.work());
+        assertEquals("StudentOne does homework", studentOne.work());
+        assertEquals("StudentTwo does homework", studentTwo.work());
     }
 
     @Test
@@ -90,7 +100,7 @@ class ApplicationContextTest {
     @Test
     void findAllBeans3() {
         Map<String, NoAnnotatedBean> allBeans = applicationContext.getAllBeans(NoAnnotatedBean.class);
-        assertNull(allBeans);
+        assertTrue(allBeans.isEmpty());
     }
 
     @Test
